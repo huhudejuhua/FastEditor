@@ -42,9 +42,31 @@ final class EditorPanelController {
     /// 用于：历史面板按 ⏎ 把一条历史载入到已经打开的编辑器。
     func loadText(_ text: String) {
         store.text = text
+        bringToFront()
+        Log.info("editor loadText (\(text.count)字)")
+    }
+
+    /// 把编辑器置前并取回键盘焦点，但**不重新居中、不激活整个 App**
+    /// （nonactivatingPanel → 原 App 保持活动态，保住后续 ⌃Enter 回填的焦点回归链）。
+    func bringToFront() {
         panel?.makeKeyAndOrderFront(nil)
         installKeyMonitor() // 已装则 no-op（内部 guard）。
-        Log.info("editor loadText (\(text.count)字)")
+    }
+
+    /// 在编辑器面板上以 sheet 形式弹「覆盖确认」。
+    /// 关键：用 window-modal sheet（attach 到本面板），**不调 NSApp.activate**——
+    /// 一旦激活本 App，就抢走原 App 的活动态，之后 ⌃Enter 回填会贴空（焦点回不到原框）。
+    func confirmOverwrite(_ completion: @escaping (Bool) -> Void) {
+        guard let panel = panel else { completion(true); return }
+        let alert = NSAlert()
+        alert.messageText = "覆盖当前编辑内容？"
+        alert.informativeText = "编辑器里已有内容，载入这条历史会替换它。"
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "覆盖")
+        alert.addButton(withTitle: "取消")
+        alert.beginSheetModal(for: panel) { response in
+            completion(response == .alertFirstButtonReturn)
+        }
     }
 
     func show(initialText: String? = nil, source: String? = nil) {

@@ -83,19 +83,29 @@ final class EditingFlow {
 
     /// 历史面板按 ⏎：把这条历史送进编辑器。
     ///   - 编辑器没开 → 新开并预填（source 用刚捕获的目标域，将来 ⌃Enter 回填到原框）。
-    ///   - 编辑器已开 → 覆盖；若编辑器已有内容，先弹确认，取消则把历史面板再显示回来。
+    ///   - 编辑器已开且为空 → 直接覆盖。
+    ///   - 编辑器已开且有内容 → 置前 + 弹 sheet 确认（异步），「覆盖」才载入、「取消」保留原内容。
     func useHistoryInEditor(text: String) {
-        historyController?.hide()
         let editor = EditorPanelController.shared
-        if editor.isVisible {
-            if !editor.currentText.isEmpty && !confirmOverwrite() {
-                Log.info("用户取消覆盖，重新显示历史面板")
-                historyController?.show()
-                return
-            }
-            editor.loadText(text)
-        } else {
+        guard editor.isVisible else {
+            historyController?.hide()
             editor.show(initialText: text, source: lastSource.rawValue)
+            return
+        }
+        // 编辑器已开：先收起历史面板，让编辑器成为最前。
+        historyController?.hide()
+        guard !editor.currentText.isEmpty else {
+            editor.loadText(text)
+            return
+        }
+        // 有内容 → 置前后弹 sheet 确认（不激活 App，保住原 App 活动态 → ⌃Enter 仍能回填）。
+        editor.bringToFront()
+        editor.confirmOverwrite { ok in
+            if ok {
+                editor.loadText(text)
+            } else {
+                Log.info("用户取消覆盖，保留编辑器原内容")
+            }
         }
     }
 
@@ -110,17 +120,5 @@ final class EditingFlow {
         }
         Log.info("历史直贴：收起面板，按 source=\(source.rawValue) 贴回原框 (\(text.count)字)")
         PasteHelper.paste(text, source: source)
-    }
-
-    /// 覆盖确认弹窗。accessory app 需先 activate 才能让 NSAlert 浮到前面。
-    private func confirmOverwrite() -> Bool {
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = "覆盖当前编辑内容？"
-        alert.informativeText = "编辑器里已有内容，载入这条历史会替换它。"
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "覆盖")
-        alert.addButton(withTitle: "取消")
-        return alert.runModal() == .alertFirstButtonReturn
     }
 }
