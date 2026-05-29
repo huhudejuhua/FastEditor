@@ -51,9 +51,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let container = HistoryStore.shared.container {
             let controller = HistoryPanelController(modelContainer: container)
             self.historyController = controller
+            // 让 EditingFlow 能协调历史面板（⌃⌘H 捕获目标域 + ⏎/⌘⏎ 动作）。
+            EditingFlow.shared.historyController = controller
             let historyKey = HotKeyManager()
             if historyKey.register(keyCode: kVK_ANSI_H, modifiers: ctrlCmd,
-                                   handler: { controller.toggle() }) {
+                                   handler: { EditingFlow.shared.toggleHistory() }) {
                 self.historyHotKey = historyKey
                 Log.info("hotkey ⌃⌘H registered → 历史浮窗 toggle")
             } else {
@@ -62,8 +64,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// 供 MenuBarExtra「历史记录」菜单项调用。
+    /// 供 MenuBarExtra「历史记录」菜单项调用。走 EditingFlow 以统一两种呼出场景的目标域捕获。
     func toggleHistory() {
-        historyController?.toggle()
+        EditingFlow.shared.toggleHistory()
     }
 }

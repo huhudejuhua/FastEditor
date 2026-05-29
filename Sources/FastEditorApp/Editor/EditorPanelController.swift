@@ -35,6 +35,18 @@ final class EditorPanelController {
     /// 面板当前是否可见。热键处理用它区分「已开→关 / 未开→抓取并开」。
     var isVisible: Bool { panel?.isVisible ?? false }
 
+    /// 编辑器当前文本。EditingFlow 用它判断「已开的编辑器是否有内容」决定是否提示覆盖。
+    var currentText: String { store.text }
+
+    /// 编辑器已可见时，覆盖文本并置前（不重新居中，避免位置跳动）。
+    /// 用于：历史面板按 ⏎ 把一条历史载入到已经打开的编辑器。
+    func loadText(_ text: String) {
+        store.text = text
+        panel?.makeKeyAndOrderFront(nil)
+        installKeyMonitor() // 已装则 no-op（内部 guard）。
+        Log.info("editor loadText (\(text.count)字)")
+    }
+
     func show(initialText: String? = nil, source: String? = nil) {
         let panel = self.panel ?? makePanel()
         self.panel = panel

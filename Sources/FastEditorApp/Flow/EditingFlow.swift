@@ -11,6 +11,9 @@ final class EditingFlow {
     private var lastSource: FocusReader.CaptureSource = .failed
     private var lastSourceApp: String?
 
+    /// 历史浮窗控制器（AppDelegate 持有，这里弱引用以便协调 hide / show）。
+    weak var historyController: HistoryPanelController?
+
     private init() {}
 
     /// 启动时调一次：把编辑器的 ⌘Enter 提交回调接到本协调器。
@@ -46,5 +49,78 @@ final class EditingFlow {
         PasteHelper.paste(text, source: source)
         // 回填成功即留档（空文本 HistoryStore 内部跳过）。
         HistoryStore.shared.save(text: text, sourceApp: lastSourceApp)
+    }
+
+    // MARK: - 历史面板协调（⌃⌘H）
+    //
+    // 统一两种呼出场景（CLAUDE.md 用户需求 §2）：
+    //   场景 A：编辑器没开时直接 ⌃⌘H —— 此刻原 App 的焦点框是前台，捕获它作为「最终输入框」目标。
+    //   场景 B：⌃⌘E 开了编辑器后再 ⌃⌘H —— 目标域已由 ⌃⌘E 捕获，复用即可（不能重捕，否则会抓到自己的编辑器）。
+    // 之后历史面板里的 ⏎/⌘⏎ 都基于这同一个 lastSource/lastSourceApp 工作，两场景逻辑一致。
+
+    /// ⌃⌘H：开/关历史面板。开之前按场景捕获（或复用）目标输入框上下文。
+    func toggleHistory() {
+        guard let history = historyController else {
+            Log.error("historyController 未设置，⌃⌘H 无效")
+            return
+        }
+        if history.isVisible {
+            history.hide()
+            return
+        }
+        if EditorPanelController.shared.isVisible {
+            // 场景 B：复用 ⌃⌘E 捕获的目标域。
+            Log.info("⌃⌘H(编辑器开) 复用 ⌃⌘E 目标域 source=\(lastSource.rawValue) app=\(lastSourceApp ?? "?")")
+        } else {
+            // 场景 A：编辑器没开，现在抓当前焦点框作为目标域（text 丢弃，只要 source/app）。
+            lastSourceApp = NSWorkspace.shared.frontmostApplication?.localizedName
+            let (_, source) = FocusReader.readFocusedText()
+            lastSource = source
+            Log.info("⌃⌘H(编辑器关) 捕获目标域 source=\(source.rawValue) app=\(lastSourceApp ?? "?")")
+        }
+        history.show()
+    }
+
+    /// 历史面板按 ⏎：把这条历史送进编辑器。
+    ///   - 编辑器没开 → 新开并预填（source 用刚捕获的目标域，将来 ⌃Enter 回填到原框）。
+    ///   - 编辑器已开 → 覆盖；若编辑器已有内容，先弹确认，取消则把历史面板再显示回来。
+    func useHistoryInEditor(text: String) {
+        historyController?.hide()
+        let editor = EditorPanelController.shared
+        if editor.isVisible {
+            if !editor.currentText.isEmpty && !confirmOverwrite() {
+                Log.info("用户取消覆盖，重新显示历史面板")
+                historyController?.show()
+                return
+            }
+            editor.loadText(text)
+        } else {
+            editor.show(initialText: text, source: lastSource.rawValue)
+        }
+    }
+
+    /// 历史面板按 ⌘⏎：把这条历史直接贴回最终输入框，跳过编辑器。
+    /// 先收起历史面板（必要时连编辑器一起收），让焦点回落到原 App，再按 source 回填。
+    func pasteHistoryToField(text: String) {
+        let source = lastSource
+        historyController?.hide()
+        if EditorPanelController.shared.isVisible {
+            // 场景 B：编辑器还开着，它在历史面板下面挡着焦点回归路径 → 一并收起。
+            EditorPanelController.shared.hide()
+        }
+        Log.info("历史直贴：收起面板，按 source=\(source.rawValue) 贴回原框 (\(text.count)字)")
+        PasteHelper.paste(text, source: source)
+    }
+
+    /// 覆盖确认弹窗。accessory app 需先 activate 才能让 NSAlert 浮到前面。
+    private func confirmOverwrite() -> Bool {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "覆盖当前编辑内容？"
+        alert.informativeText = "编辑器里已有内容，载入这条历史会替换它。"
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "覆盖")
+        alert.addButton(withTitle: "取消")
+        return alert.runModal() == .alertFirstButtonReturn
     }
 }

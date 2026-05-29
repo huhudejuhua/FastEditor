@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:FastEditorApp}",
+            "name": "Debug FastEditorApp",
+            "target": "FastEditorApp",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug FastEditorApp"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:FastEditorApp}",
+            "name": "Release FastEditorApp",
+            "target": "FastEditorApp",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release FastEditorApp"
+        }
+    ]
+}
