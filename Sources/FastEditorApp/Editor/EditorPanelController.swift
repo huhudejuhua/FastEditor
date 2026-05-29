@@ -32,6 +32,9 @@ final class EditorPanelController {
 
     // MARK: - Public
 
+    /// 面板当前是否可见。热键处理用它区分「已开→关 / 未开→抓取并开」。
+    var isVisible: Bool { panel?.isVisible ?? false }
+
     func show(initialText: String? = nil, source: String? = nil) {
         let panel = self.panel ?? makePanel()
         self.panel = panel

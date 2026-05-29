@@ -33,6 +33,12 @@ enum Log {
         logger.error("❌ \(msg, privacy: .public)")
     }
 
+    /// 多行原文输出（如抓取到的文本内容）。
+    static func dump(_ msg: String) {
+        print(msg)
+        logger.info("\(msg, privacy: .public)")
+    }
+
     static func banner() {
         let text = """
         ────────────────────────────────────────────────────────────

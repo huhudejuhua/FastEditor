@@ -23,13 +23,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // 注册主热键 ⌃⌘E → 呼出/关闭编辑器。
-        // 第3步：开空编辑器；第4步起 readFocusedText 抓内容预填（见 EditingFlow）。
+        // 已开 → 关；未开 → 先抓当前焦点框内容再带进编辑器预填。
+        // 第5步把「抓→编辑→⌘Enter→回填+留档」整条链抽进 EditingFlow。
         let manager = HotKeyManager()
-        if manager.register(handler: { EditorPanelController.shared.toggle() }) {
+        if manager.register(handler: { Self.handleHotKey() }) {
             self.hotKeyManager = manager
-            Log.info("hotkey ⌃⌘E registered → toggle 编辑器")
+            Log.info("hotkey ⌃⌘E registered → 抓取焦点文本 + 呼出编辑器")
         } else {
             Log.error("⌃⌘E 注册失败（可能被占用）。")
         }
+    }
+
+    /// 主热键动作：编辑器已开则关；否则抓当前焦点框文本，带进编辑器预填。
+    private static func handleHotKey() {
+        let editor = EditorPanelController.shared
+        if editor.isVisible {
+            editor.hide()
+            return
+        }
+        // 抓取必须在 show 之前：此刻原 App 仍是前台，FocusReader 读的是它的焦点框。
+        let (text, source) = FocusReader.readFocusedText()
+        Log.info("抓取结果：source=\(source.rawValue), 内容=\(text?.count ?? 0)字")
+        editor.show(initialText: text, source: source.rawValue)
     }
 }
