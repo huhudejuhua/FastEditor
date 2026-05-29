@@ -2,7 +2,9 @@
 
 > 你正在接手 **FastEditor 的整合工程**：把上层目录里五个已验证的 demo（Backfill / FocusRead / EditorWindow / HistoryStore / Onboarding）合并成一个完整可用的产品。请先读完本文档再动手。
 >
-> ✅ **实现状态（2026-05-29 更新）**：§6 第 1~7 步**全部完成并逐项验证通过**，核心产品功能完整可用（任意文本框 ⌃⌘E 抓取→编辑→⌃Enter 回填+留档→⌃⌘H 检索）。源码在 `Sources/FastEditorApp/`，git 一步一 commit。**仅剩第 8 步签名公证**——硬阻塞于 Apple 开发者账号（见 §8），ad-hoc 顶着。下面的规划/接口/风险说明仍是有效参考。各步完成详情见 §6 状态标记。
+> ✅ **实现状态（2026-05-30 更新）**：§6 第 1~7 步**全部完成并逐项验证通过**，核心产品功能完整可用（任意文本框 ⌃⌘E 抓取→编辑→⌃Enter 回填+留档→⌃⌘H 检索）。源码在 `Sources/FastEditorApp/`，git 一步一 commit。**仅剩第 8 步签名公证**——硬阻塞于 Apple 开发者账号（见 §8），ad-hoc 顶着。下面的规划/接口/风险说明仍是有效参考。各步完成详情见 §6 状态标记。
+>
+> 🆕 **第 7 步之后的增强（2026-05-30，commit 694cffe）**：历史面板做成**键盘驱动复用**——`↑↓` 选条 / `⏎` 送进编辑器（已开且有内容先弹覆盖确认）/ `⌃⏎` 跳过编辑器直接贴回原框 / `⌫` 删除（搜索框空时）。两种呼出场景（直接 ⌃⌘H、编辑器中 ⌃⌘H）统一走 `EditingFlow.toggleHistory` 捕获/复用目标域。详见 §6 增强条目。
 
 ---
 
@@ -146,6 +148,13 @@ FastEditorApp/
 > - **HotKeyManager 已改造为可注册多个热键**（全局 event handler 只装一次，每实例唯一 id）。
 > - **HistoryStore 是单例**（`.shared`，持有 ModelContainer + `save(text:sourceApp:)`），不走 demo 那种 AppDelegate 注入。
 > - **TCC 跨重建保权限的真正修法**见 §7.E（ad-hoc 必须显式设 identifier-based DR，仅 `--identifier` 无效）——这是五个 demo 都有的隐患，本工程已修。
+
+> **🆕 第 7 步之后的增强（2026-05-30，commit 694cffe）：历史面板键盘驱动复用。**
+> 原历史面板只能看 + 鼠标删。本次做成键盘流转，让「复用旧提示词」成为一等操作：
+> - **键位**（在 `HistoryPanelController` 的 AppKit keyMonitor 里统一拦）：`↑↓` 选择、`⏎` 送进编辑器、`⌃⏎` 跳过编辑器直接贴回原框、`⌫` 删除（仅搜索框为空时；非空放行让退格编辑搜索文本，避免冲突）、`esc` 关闭。
+> - **新增 `HistoryViewModel`**（ObservableObject，类比 `EditorTextStore` 的「桥」）：单一数据源持「数据+搜索过滤+选中下标」，同时供 SwiftUI 渲染高亮和 AppKit 监听器索引选中条目。**弃用 `@Query` 改主动 fetch**（自持 `ModelContext(container)`，每次 show 刷新）——因为 @Query 结果只活在视图里、AppKit 监听器够不到。
+> - **两种呼出场景统一**走 `EditingFlow.toggleHistory()`：编辑器**关**时按 ⌃⌘H → 当场抓当前焦点框为目标域；编辑器**开**时按 ⌃⌘H → 复用 ⌃⌘E 已捕获的目标域（不会误抓到自己的编辑器）。之后 `⏎`/`⌃⏎` 都基于这同一份 `lastSource/lastSourceApp`。`⌃⏎` 在场景 B 会先收起历史面板再收起编辑器，让焦点回落到原 App 再回填。
+> - **两个整合期 bug（已修）**：① keyMonitor guard 用 `panel.isKeyWindow` 替代 `NSApp.keyWindow === panel`——nonactivatingPanel + 全局热键下本 App 未激活时后者为 nil，方向键会漏拦被 ScrollView 当滚动吃掉；② 列表 `ForEach` 标识与 `scrollTo` 的 `.id` 必须统一用 index 一套，否则两套 identity 打架致旧选中行高亮卡死。
 
 1. ✅ **工程骨架 + 切 SwiftUI App 生命周期**（验风险 C）：`Package.swift` + `Info.plist` + `build-app.sh` + `Log.swift` + `FastEditorApp.swift`(@main App + 空 MenuBarExtra 只放退出) + `AppDelegate.swift`(只打 log)。验：能 build、`pgrep -x FastEditorApp` 在跑、状态栏有图标、无 Dock 图标、log 有启动行。**§7.A 给了实测可跑的骨架代码，照抄。**
 2. ✅ **搬权限闸门**：`PermissionManager` + `PermissionState` + `OnboardingWindowController` + `OnboardingView`。首启检测两项，缺则弹引导窗。验：同 OnboardingDemo（检测 / deeplink / 1s 轮询翻转 / 重启生效）。先 `tccutil reset Accessibility com.fasteditor.app && tccutil reset ListenEvent com.fasteditor.app` 重测。
