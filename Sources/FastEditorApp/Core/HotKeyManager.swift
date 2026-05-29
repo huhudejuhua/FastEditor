@@ -1,68 +1,45 @@
 import AppKit
 import Carbon.HIToolbox
 
-/// Carbon 全局热键封装（抄自 demo）。
-/// 产品主热键：⌃⌘E（Control + Command + E）。
+/// Carbon 全局热键封装（抄自 demo，整合期改造为可注册多个热键）。
+///
+/// 产品热键：
+///   - 主热键 ⌃⌘E：抓焦点文本 + 呼出/关闭编辑器
+///   - 副热键 ⌃⌘H：呼出/关闭历史浮窗
 /// 不用单 ⌃E：那是系统级「光标移到行尾」的 emacs 绑定，全局抢占会破坏文本框里的行尾跳转。
-/// 加 Command 后不踩任何系统文本编辑键。keyCode 第一版硬编码；可配置是后期目标（CLAUDE.md §5）。
+///
+/// 一个进程可注册多个热键：事件 handler 只全局装一次（避免回调被多个 handler 重复触发），
+/// 每个 HotKeyManager 实例分配唯一 id，回调按 id 在静态映射里查。keyCode 第一版由调用方传入；
+/// 做成用户可配置是后期目标（CLAUDE.md §5）。
 final class HotKeyManager {
     private var hotKeyRef: EventHotKeyRef?
-    private var eventHandlerRef: EventHandlerRef?
-    private var handler: (() -> Void)?
+    private var id: UInt32 = 0
 
-    // 用静态映射把 hotKeyID -> 回调串起来，避免在 C 回调里捕获 self。
+    // 静态映射 id -> 回调，避免在 C 回调里捕获 self。
     private static var handlersByID: [UInt32: () -> Void] = [:]
+    private static var nextID: UInt32 = 1
     private static let signature: OSType = 0x46454454 // 'FEDT' = FastEditor
 
-    /// 注册主热键 ⌃⌘E。返回是否成功。
-    @discardableResult
-    func register(handler: @escaping () -> Void) -> Bool {
-        self.handler = handler
+    // 事件 handler 全局只装一次。
+    private static var sharedHandlerRef: EventHandlerRef?
 
-        let id: UInt32 = 1
+    /// 注册一个全局热键。返回是否成功。
+    /// - keyCode: Carbon 虚拟键码（如 kVK_ANSI_E）
+    /// - modifiers: Carbon 修饰键（如 controlKey | cmdKey）
+    @discardableResult
+    func register(keyCode: Int,
+                  modifiers: UInt32,
+                  handler: @escaping () -> Void) -> Bool {
+        Self.installSharedHandlerOnce()
+
+        let id = Self.nextID
+        Self.nextID += 1
+        self.id = id
         Self.handlersByID[id] = handler
 
-        var eventType = EventTypeSpec(
-            eventClass: OSType(kEventClassKeyboard),
-            eventKind: UInt32(kEventHotKeyPressed)
-        )
-
-        let installStatus = InstallEventHandler(
-            GetApplicationEventTarget(),
-            { (_, eventRef, _) -> OSStatus in
-                guard let eventRef = eventRef else { return noErr }
-                var hkID = EventHotKeyID()
-                let status = GetEventParameter(
-                    eventRef,
-                    EventParamName(kEventParamDirectObject),
-                    EventParamType(typeEventHotKeyID),
-                    nil,
-                    MemoryLayout<EventHotKeyID>.size,
-                    nil,
-                    &hkID
-                )
-                if status == noErr, let cb = HotKeyManager.handlersByID[hkID.id] {
-                    cb()
-                }
-                return noErr
-            },
-            1,
-            &eventType,
-            nil,
-            &eventHandlerRef
-        )
-
-        if installStatus != noErr {
-            Log.error("InstallEventHandler failed: \(installStatus)")
-            return false
-        }
-
         let hotKeyID = EventHotKeyID(signature: Self.signature, id: id)
-        let modifiers: UInt32 = UInt32(controlKey) | UInt32(cmdKey)
-        let keyCode: UInt32 = UInt32(kVK_ANSI_E)
-
         let regStatus = RegisterEventHotKey(
-            keyCode,
+            UInt32(keyCode),
             modifiers,
             hotKeyID,
             GetApplicationEventTarget(),
@@ -71,13 +48,50 @@ final class HotKeyManager {
         )
         if regStatus != noErr {
             Log.error("RegisterEventHotKey failed: \(regStatus)")
+            Self.handlersByID[id] = nil
             return false
         }
         return true
     }
 
+    /// 安装分发用的事件 handler——只装一次。
+    private static func installSharedHandlerOnce() {
+        guard sharedHandlerRef == nil else { return }
+        var eventType = EventTypeSpec(
+            eventClass: OSType(kEventClassKeyboard),
+            eventKind: UInt32(kEventHotKeyPressed)
+        )
+        let status = InstallEventHandler(
+            GetApplicationEventTarget(),
+            { (_, eventRef, _) -> OSStatus in
+                guard let eventRef = eventRef else { return noErr }
+                var hkID = EventHotKeyID()
+                let err = GetEventParameter(
+                    eventRef,
+                    EventParamName(kEventParamDirectObject),
+                    EventParamType(typeEventHotKeyID),
+                    nil,
+                    MemoryLayout<EventHotKeyID>.size,
+                    nil,
+                    &hkID
+                )
+                if err == noErr, let cb = HotKeyManager.handlersByID[hkID.id] {
+                    cb()
+                }
+                return noErr
+            },
+            1,
+            &eventType,
+            nil,
+            &sharedHandlerRef
+        )
+        if status != noErr {
+            Log.error("InstallEventHandler failed: \(status)")
+        }
+    }
+
     deinit {
         if let ref = hotKeyRef { UnregisterEventHotKey(ref) }
-        if let ref = eventHandlerRef { RemoveEventHandler(ref) }
+        Self.handlersByID[id] = nil
     }
 }

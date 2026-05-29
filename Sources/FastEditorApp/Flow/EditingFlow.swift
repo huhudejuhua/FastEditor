@@ -9,6 +9,7 @@ final class EditingFlow {
     static let shared = EditingFlow()
 
     private var lastSource: FocusReader.CaptureSource = .failed
+    private var lastSourceApp: String?
 
     private init() {}
 
@@ -28,9 +29,10 @@ final class EditingFlow {
             return
         }
         // 抓取必须在 show 之前：此刻原 App 仍是前台，FocusReader 读的是它的焦点框。
+        lastSourceApp = NSWorkspace.shared.frontmostApplication?.localizedName
         let (text, source) = FocusReader.readFocusedText()
         lastSource = source
-        Log.info("抓取结果：source=\(source.rawValue), 内容=\(text?.count ?? 0)字")
+        Log.info("抓取结果：source=\(source.rawValue), app=\(lastSourceApp ?? "?"), 内容=\(text?.count ?? 0)字")
         editor.show(initialText: text, source: source.rawValue)
     }
 
@@ -42,6 +44,7 @@ final class EditingFlow {
         // hide(orderOut) 后，原 App 的焦点框重新成为系统焦点。
         // PasteHelper 内部 0.05s 延时既等剪贴板写好、也给焦点回归留结算时间。
         PasteHelper.paste(text, source: source)
-        // 第6步：HistoryStore.save(text, sourceApp:)
+        // 回填成功即留档（空文本 HistoryStore 内部跳过）。
+        HistoryStore.shared.save(text: text, sourceApp: lastSourceApp)
     }
 }
