@@ -99,11 +99,11 @@ final class EditorPanelController {
             hide()
             return nil
         }
-        // ⌘Enter / ⌘NumpadEnter → 触发 commit
+        // ⌃Enter / ⌃NumpadEnter → 触发 commit
         let isReturn = event.keyCode == UInt16(kVK_Return) || event.keyCode == UInt16(kVK_ANSI_KeypadEnter)
-        if isReturn && event.modifierFlags.contains(.command) {
+        if isReturn && event.modifierFlags.contains(.control) {
             let text = store.text
-            Log.info("⌘↩ Enter → commit (\(text.count) chars): \"\(text.prefix(120))\"")
+            Log.info("⌃↩ Enter → commit (\(text.count) chars): \"\(text.prefix(120))\"")
             if let handler = onCommit {
                 handler(text)
             }
