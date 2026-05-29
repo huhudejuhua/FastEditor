@@ -1,8 +1,8 @@
 # CLAUDE.md — FastEditor / FastEditorApp（整合工程）
 
-> 你正在接手 **FastEditor 的整合工程**：把上层目录里五个已验证的 demo（Backfill / FocusRead / EditorWindow / HistoryStore / Onboarding）合并成一个完整可用的产品。请先读完本文档，再开始任何实现。
+> 你正在接手 **FastEditor 的整合工程**：把上层目录里五个已验证的 demo（Backfill / FocusRead / EditorWindow / HistoryStore / Onboarding）合并成一个完整可用的产品。请先读完本文档再动手。
 >
-> ⚠️ 本文档是**规划稿**——目录里目前只有这份 CLAUDE.md，没有任何源码。实现按 §6 的顺序一步步来。
+> ✅ **实现状态（2026-05-29 更新）**：§6 第 1~7 步**全部完成并逐项验证通过**，核心产品功能完整可用（任意文本框 ⌃⌘E 抓取→编辑→⌃Enter 回填+留档→⌃⌘H 检索）。源码在 `Sources/FastEditorApp/`，git 一步一 commit。**仅剩第 8 步签名公证**——硬阻塞于 Apple 开发者账号（见 §8），ad-hoc 顶着。下面的规划/接口/风险说明仍是有效参考。各步完成详情见 §6 状态标记。
 
 ---
 
@@ -138,14 +138,23 @@ FastEditorApp/
 > 工作流和五个 demo 一致：`./build-app.sh` 打包 → `open FastEditorApp.app` → `/usr/bin/log stream --predicate 'subsystem == "com.fasteditor.app"' --info` 看日志 → `pkill -x FastEditorApp` 停。
 > ⚠️ `log` 是 zsh 内建命令，会盖掉 `/usr/bin/log`，跑日志流务必用**全路径** `/usr/bin/log`。
 
-1. **工程骨架 + 切 SwiftUI App 生命周期**（验风险 C）：`Package.swift` + `Info.plist` + `build-app.sh` + `Log.swift` + `FastEditorApp.swift`(@main App + 空 MenuBarExtra 只放退出) + `AppDelegate.swift`(只打 log)。验：能 build、`pgrep -x FastEditorApp` 在跑、状态栏有图标、无 Dock 图标、log 有启动行。**§7.A 给了实测可跑的骨架代码，照抄。**
-2. **搬权限闸门**：`PermissionManager` + `PermissionState` + `OnboardingWindowController` + `OnboardingView`。首启检测两项，缺则弹引导窗。验：同 OnboardingDemo（检测 / deeplink / 1s 轮询翻转 / 重启生效）。先 `tccutil reset Accessibility com.fasteditor.app && tccutil reset ListenEvent com.fasteditor.app` 重测。
-3. **搬编辑器 + 主热键**：`HotKeyManager` + `EditorPanelController` + `EditorView` + `EditorTextStore`。主热键开空编辑器，Esc / ⌘Enter 通（onCommit 先只打 log）。验：浮窗 nonactivatingPanel 不抢焦点、Esc 关、⌘Enter 触发 log。
-4. **接抓取**（风险 A 上半）：搬 `FocusReader` + `ClipboardCapture`。主热键 → `readFocusedText()` → `show(initialText:source:)`。验：编辑器打开时预填了当前焦点框内容，log 出 source。
-5. **接回填**（★风险 A 下半 + 风险 B，最关键）：写 `EditingFlow`，`onCommit` → 改造后的 `PasteHelper.paste(text, source)`。**重点测焦点回归**：Chrome 网页框 / 原生 App（备忘录/TextEdit）/ Electron（VS Code/Slack）各跑一遍「抓→编辑→⌘Enter→内容正确回填到原框」。
-6. **接历史**：`HistoryEntry` + `HistoryStore`(ModelContainer) + 提交成功时 `save(...)`。浏览 UI 用 `HistoryListView`，挂到 MenuBarExtra 菜单项或副热键。验：每次提交写一行（含 sourceApp），列表可检索、可复用。
-7. **打磨**：MenuBarExtra 菜单补齐（打开编辑器 / 历史 / 设置 / 退出）、热键冲突处理、文案。
-8. **签名公证**：见 §8，**当前硬阻塞**（没 Apple 开发者账号），ad-hoc 顶着。
+> **✅ 进度（2026-05-29）：第 1~7 步全部完成并验证通过，一步一 commit。第 8 步账号阻塞未动。**
+> 实现期与原计划的几处落地差异（已生效）：
+> - **主热键 ⌃⌘E**（不是规划里随手写的 ⌃⌥E）、**副热键 ⌃⌘H**（历史）。不用单 ⌃E：那是系统级「光标移到行尾」绑定。
+> - **提交键 ⌃Enter**（不是 ⌘Enter，用户偏好）。
+> - **编辑器面板默认 480×340**。
+> - **HotKeyManager 已改造为可注册多个热键**（全局 event handler 只装一次，每实例唯一 id）。
+> - **HistoryStore 是单例**（`.shared`，持有 ModelContainer + `save(text:sourceApp:)`），不走 demo 那种 AppDelegate 注入。
+> - **TCC 跨重建保权限的真正修法**见 §7.E（ad-hoc 必须显式设 identifier-based DR，仅 `--identifier` 无效）——这是五个 demo 都有的隐患，本工程已修。
+
+1. ✅ **工程骨架 + 切 SwiftUI App 生命周期**（验风险 C）：`Package.swift` + `Info.plist` + `build-app.sh` + `Log.swift` + `FastEditorApp.swift`(@main App + 空 MenuBarExtra 只放退出) + `AppDelegate.swift`(只打 log)。验：能 build、`pgrep -x FastEditorApp` 在跑、状态栏有图标、无 Dock 图标、log 有启动行。**§7.A 给了实测可跑的骨架代码，照抄。**
+2. ✅ **搬权限闸门**：`PermissionManager` + `PermissionState` + `OnboardingWindowController` + `OnboardingView`。首启检测两项，缺则弹引导窗。验：同 OnboardingDemo（检测 / deeplink / 1s 轮询翻转 / 重启生效）。先 `tccutil reset Accessibility com.fasteditor.app && tccutil reset ListenEvent com.fasteditor.app` 重测。
+3. ✅ **搬编辑器 + 主热键**：`HotKeyManager` + `EditorPanelController` + `EditorView` + `EditorTextStore`。主热键(⌃⌘E)开空编辑器，Esc / ⌃Enter 通（onCommit 先只打 log）。验：浮窗 nonactivatingPanel 不抢焦点、Esc 关、⌃Enter 触发 log。
+4. ✅ **接抓取**（风险 A 上半）：搬 `FocusReader` + `ClipboardCapture`。主热键 → `readFocusedText()` → `show(initialText:source:)`。验：编辑器打开时预填了当前焦点框内容，log 出 source。
+5. ✅ **接回填**（★风险 A 下半 + 风险 B，最关键）：写 `EditingFlow`，`onCommit` → 改造后的 `PasteHelper.paste(text, source)`。**焦点回归**：原生 App / Chrome 网页框 / 终端各场景实测「抓→编辑→⌃Enter→内容正确回填到原框」通过。
+6. ✅ **接历史**：`HistoryEntry` + `HistoryStore`(单例持 ModelContainer) + 提交成功时 `save(text:sourceApp:)`。浏览 UI 用 `HistoryListView`，挂副热键 ⌃⌘H。验：每次提交写一行（含 sourceApp），列表可检索、可删除、落盘持久化。
+7. ✅ **打磨**：MenuBarExtra 菜单补齐（打开编辑器 ⌃⌘E / 历史记录 ⌃⌘H / 权限设置 / 退出）。
+8. ⏸️ **签名公证**：见 §8，**当前硬阻塞**（没 Apple 开发者账号），ad-hoc 顶着。
 
 任一步卡住，先回退上一步隔离问题——权限 / 时序 / 焦点类 bug 报错不直观，逐步隔离好排查。
 
