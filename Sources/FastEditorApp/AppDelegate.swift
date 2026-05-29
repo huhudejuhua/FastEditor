@@ -2,11 +2,15 @@ import AppKit
 import Carbon.HIToolbox
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// 让 MenuBarExtra 菜单项能调到 AppDelegate 持有的控制器（历史浮窗）。
+    static private(set) weak var shared: AppDelegate?
+
     private var editorHotKey: HotKeyManager?
     private var historyHotKey: HotKeyManager?
     private var historyController: HistoryPanelController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        Self.shared = self
         Log.banner()
         Log.info("FastEditor launched. Bundle = \(Bundle.main.bundleIdentifier ?? "<nil>")")
 
@@ -56,5 +60,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Log.error("⌃⌘H 注册失败（可能被占用）。")
             }
         }
+    }
+
+    /// 供 MenuBarExtra「历史记录」菜单项调用。
+    func toggleHistory() {
+        historyController?.toggle()
     }
 }
