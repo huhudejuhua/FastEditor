@@ -1,7 +1,8 @@
 import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    // 后续往这里挂：hotKeyManager / 各 controller
+    private var hotKeyManager: HotKeyManager?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         Log.banner()
         Log.info("FastEditor launched. Bundle = \(Bundle.main.bundleIdentifier ?? "<nil>")")
@@ -19,6 +20,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             Log.warn("缺权限 → 自动弹出引导窗口。")
             OnboardingWindowController.shared.show()
+        }
+
+        // 注册主热键 ⌃⌘E → 呼出/关闭编辑器。
+        // 第3步：开空编辑器；第4步起 readFocusedText 抓内容预填（见 EditingFlow）。
+        let manager = HotKeyManager()
+        if manager.register(handler: { EditorPanelController.shared.toggle() }) {
+            self.hotKeyManager = manager
+            Log.info("hotkey ⌃⌘E registered → toggle 编辑器")
+        } else {
+            Log.error("⌃⌘E 注册失败（可能被占用）。")
         }
     }
 }
