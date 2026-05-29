@@ -46,11 +46,15 @@ cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/$APP_NAME"
 cp "Resources/Info.plist" "$APP_DIR/Contents/Info.plist"
 
 # ---- sign (ad-hoc) ----
-# --identifier 显式指定 Bundle ID，让 ad-hoc 签名的 designated requirement
-# 锁在这个 ID 上。这样即使每次构建二进制 hash 变了，TCC 也会认作同一个 App，
-# 已授权的「辅助功能 / 输入监控」会持续生效。
-echo "→ codesign (ad-hoc, identifier=$BUNDLE_ID)"
-codesign --force --sign - --identifier "$BUNDLE_ID" "$APP_DIR" >/dev/null 2>&1
+# 关键：把 designated requirement 显式设成 identifier-based（而不是 ad-hoc 默认的
+# cdhash-based）。TCC 在授权时记下这个 DR，之后每次启动按 DR 判断「是不是同一个 App」。
+#   - 默认 ad-hoc 的 DR = `cdhash H"..."`：二进制一变 hash 就变 → TCC 当成新 App → 重新授权。
+#   - 这里 `-r=designated => identifier "ID"`：只认 bundle ID → 重建后 hash 变了 TCC 仍认旧授权。
+# （仅 --identifier 不够：那只改 Identifier 字段，DR 仍是 cdhash。必须显式给 -r。）
+echo "→ codesign (ad-hoc, identifier-based DR=$BUNDLE_ID)"
+codesign --force --sign - --identifier "$BUNDLE_ID" \
+    -r="designated => identifier \"$BUNDLE_ID\"" \
+    "$APP_DIR" >/dev/null 2>&1
 codesign -dv "$APP_DIR" 2>&1 | grep -E "Identifier|Signature" || true
 
 echo ""

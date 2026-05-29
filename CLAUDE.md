@@ -219,7 +219,14 @@ CFBundlePackageType    = APPL
 ```
 
 ### E. `build-app.sh`
-抄 `../OnboardingDemo/build-app.sh`，改两个变量：`APP_NAME="FastEditorApp"` / `BUNDLE_ID="com.fasteditor.app"`，删掉 onboarding 特有的 echo 文案。**务必保留 ad-hoc 签名那行的 `--identifier "$BUNDLE_ID"`**（锁 TCC 身份，避免重编译失权）。`release-notarize` 注释占位块原样保留（见 §8）。
+抄 `../OnboardingDemo/build-app.sh`，改两个变量：`APP_NAME="FastEditorApp"` / `BUNDLE_ID="com.fasteditor.app"`，删掉 onboarding 特有的 echo 文案。`release-notarize` 注释占位块原样保留（见 §8）。
+
+> ⚠️ **TCC 跨重建保权限的真正关键（实测纠正）**：ad-hoc 签名默认的 designated requirement 是 `cdhash H"..."`，二进制一重编译 hash 就变 → TCC 当成新 App → 每次都要重新授权。光加 `--identifier` **不够**（那只改 Identifier 字段，DR 仍是 cdhash）。必须显式把 DR 设成 identifier-based：
+> ```
+> codesign --force --sign - --identifier "$BUNDLE_ID" \
+>     -r="designated => identifier \"$BUNDLE_ID\"" "$APP_DIR"
+> ```
+> 这样 TCC 按 bundle ID 认身份，重编译后已授权的「辅助功能 / 输入监控」持续生效。五个 demo 的脚本都没这条 `-r`，所以 demo 期一直有「重建即失权」的毛病。本工程 build-app.sh 已修。
 
 ### F. 整合后核心件的稳定接口（搬运时认这些签名）
 ```swift
