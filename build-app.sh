@@ -53,6 +53,14 @@ mkdir -p "$APP_DIR/Contents/Resources"
 cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/$APP_NAME"
 cp "Resources/Info.plist" "$APP_DIR/Contents/Info.plist"
 
+# App 文件图标：Info.plist 里 CFBundleIconFile=AppIcon，这里把 .icns 拷进 Resources/。
+# 缺图标时只告警不中断（图标非功能必需）。重做图标见 Resources/AppIcon/（make-icon.swift + make-icns.sh）。
+if [ -f "Resources/AppIcon/AppIcon.icns" ]; then
+    cp "Resources/AppIcon/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
+else
+    echo "⚠️  Resources/AppIcon/AppIcon.icns 不存在，本次不带图标（重做：见 Resources/AppIcon/README）"
+fi
+
 # ---- sign (ad-hoc) ----
 # 关键：把 designated requirement 显式设成 identifier-based（而不是 ad-hoc 默认的
 # cdhash-based）。TCC 在授权时记下这个 DR，之后每次启动按 DR 判断「是不是同一个 App」。

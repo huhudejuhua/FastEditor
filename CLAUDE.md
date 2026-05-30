@@ -26,7 +26,7 @@
 
 ## 2. 关键决策（已锁定，别推翻）
 
-1. **构建：SPM + `build-app.sh`**（不是 Xcode 工程）。SwiftData / MenuBarExtra / SwiftUI App 在 SPM 下都能跑。代价：App 图标 / Asset Catalog / entitlements 要手动塞进 build 脚本；等真要上架再考虑迁 Xcode。
+1. **构建：SPM + `build-app.sh`**（不是 Xcode 工程）。SwiftData / MenuBarExtra / SwiftUI App 在 SPM 下都能跑。代价：App 图标 / Asset Catalog / entitlements 要手动塞进 build 脚本（图标已落地：`build-app.sh` 组装时拷 `Resources/AppIcon/AppIcon.icns` 进 bundle，源与重做步骤见该目录 README）；等真要上架再考虑迁 Xcode。
 2. **生命周期：`@main SwiftUI App` + `MenuBarExtra` + `NSApplicationDelegateAdaptor`**（不是 demo 的 `main.swift` + `NSApplication.shared.run()`）。无 Dock 图标靠 `LSUIElement=true`；`MenuBarExtra` 给状态栏入口（打开编辑器 / 历史 / 权限设置 / 退出）。不需手动 `setActivationPolicy(.accessory)`。
 3. **全新 Bundle ID `com.fasteditor.app`**——独立 TCC 身份，用户需重新授权一次辅助功能 + 输入监控（跟 demo 互不影响），引导页接管。
 
@@ -70,7 +70,9 @@
 FastEditorApp/
 ├── Package.swift                # swift-tools 5.9，executableTarget，macOS v14
 ├── build-app.sh                 # ad-hoc 打包 + identifier-based DR（§7.A）
-├── Resources/Info.plist         # CFBundleIdentifier=com.fasteditor.app，LSUIElement=true
+├── Resources/
+│   ├── Info.plist               # CFBundleIdentifier=com.fasteditor.app，LSUIElement=true，CFBundleIconFile=AppIcon
+│   └── AppIcon/                 # App 文件图标源（make-icon.swift 生成 → make-icns.sh 切 .icns），README 有重做步骤
 └── Sources/FastEditorApp/
     ├── FastEditorApp.swift       # @main App + MenuBarExtra
     ├── AppDelegate.swift         # 首启权限闸门 + 注册热键 + 持有 historyController
