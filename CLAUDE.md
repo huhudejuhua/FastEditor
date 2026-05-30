@@ -106,6 +106,7 @@ FastEditorApp/
 ## 5. 实现状态 + 落地差异 + 工作流
 
 **工作流**：`./build-app.sh` 打包 → `open FastEditorApp.app` → 看日志 → `pkill -x FastEditorApp` 停。
+> 子命令：`./build-app.sh release`（release 构建）、`./build-app.sh dmg`（release + 封 `FastEditorApp.dmg`，hdiutil 零依赖，自带「拖进 Applications」布局，见 §8）、`./build-app.sh clean`（清 .app/.dmg + SwiftPM 产物）。
 > ⚠️ `log` 是 zsh 内建命令，会盖掉 `/usr/bin/log`，跑日志流务必用全路径：
 > `/usr/bin/log stream --predicate 'subsystem == "com.fasteditor.app"' --info`
 > 重测引导可先 `tccutil reset Accessibility com.fasteditor.app && tccutil reset ListenEvent com.fasteditor.app`。
@@ -179,6 +180,7 @@ func startPolling() / stopPolling()   // 1s Timer，窗显示时开、关时停
 
 ⚠️ **当前不执行**。用户**没有 Apple 开发者账号**（99 美元/年），钥匙串里没有 "Developer ID Application" 证书，跑任何 `codesign --sign "Developer ID..."` / `notarytool` / `stapler` 都会失败。
 - 第一版 build 用 **ad-hoc 签名**（`build-app.sh` 现有逻辑，含 §7.A 的 DR 修法）。`build-app.sh` 末尾保留了 `release-notarize` 注释占位块。
+- **dmg 打包可独立于公证进行**：`./build-app.sh dmg` 用系统自带 `hdiutil` 把 ad-hoc 签名的 .app 封进磁盘镜像（实测 ~180K），不需账号。**但镜像里的 App 仍未公证**——自用/本机拷贝无碍；对方从网络下载（带 `com.apple.quarantine`）会被 Gatekeeper 拦，需右键→打开或 `xattr -dr com.apple.quarantine /Applications/FastEditorApp.app`。要「公开随便下就能开」仍卡公证（本节阻塞）。
 - 完整公证流水线在 `../OnboardingDemo/CLAUDE.md` §7 和 `项目交接文档_FastEditor.md` §5.3 已写好，账号到位后另开会话照跑，把 Bundle ID `com.fasteditor.app` 和 Developer ID 证书替进去。
 - **不要催用户现在买账号**，按用户节奏来。
 
