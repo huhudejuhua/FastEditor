@@ -82,7 +82,8 @@ FastEditorApp/
     │   ├── FocusReader.swift         # readFocusedText() → (text, source)
     │   ├── ClipboardCapture.swift
     │   ├── PasteHelper.swift         # paste(text, source) 按 source 分支（§3.B）
-    │   └── HotKeyManager.swift       # 可注册多个全局热键（handler 只装一次）
+    │   ├── HotKeyManager.swift       # 可注册多个全局热键（handler 只装一次）
+    │   └── LoginItemManager.swift    # 开机自启开关（SMAppService.mainApp 登记/注销）
     ├── Editor/
     │   ├── EditorPanelController.swift  # show/hide/toggle/loadText/bringToFront/confirmOverwrite/onCommit
     │   ├── EditorView.swift
@@ -121,6 +122,7 @@ FastEditorApp/
 - **HotKeyManager 可注册多个热键**（全局 event handler 只装一次，每实例唯一 id）。
 - **HistoryStore 是单例**（`.shared`，持 ModelContainer + `save(text:sourceApp:)`），不走 demo 那种 AppDelegate 注入。
 - **TCC 跨重建保权限的真正修法**见 §7.A（ad-hoc 必须显式设 identifier-based DR）——五个 demo 都有的隐患，本工程已修。
+- **开机自启（可配置）**：用 macOS 13+ `SMAppService.mainApp`（零依赖，不违反 §9），不做老式 helper 子 bundle。状态栏菜单加可勾选项「开机自动启动」，绑 `LoginItemManager.shared.isEnabled`，菜单 `onAppear` 刷新以同步用户在「系统设置 → 登录项」里的手动改动。⚠️ 两个 ad-hoc 坑：① 登记的是 App **当前路径**，挪进 /Applications 后需重勾一次；② 偶尔被系统标「需批准」，登录项列表里手动开即可。
 
 ---
 
