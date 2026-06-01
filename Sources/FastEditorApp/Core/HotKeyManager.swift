@@ -9,8 +9,9 @@ import Carbon.HIToolbox
 /// 不用单 ⌃E：那是系统级「光标移到行尾」的 emacs 绑定，全局抢占会破坏文本框里的行尾跳转。
 ///
 /// 一个进程可注册多个热键：事件 handler 只全局装一次（避免回调被多个 handler 重复触发），
-/// 每个 HotKeyManager 实例分配唯一 id，回调按 id 在静态映射里查。keyCode 第一版由调用方传入；
-/// 做成用户可配置是后期目标（CLAUDE.md §5）。
+/// 每个 HotKeyManager 实例分配唯一 id，回调按 id 在静态映射里查。
+/// keyCode/modifiers 由调用方传入，现在来自 `HotKeySettings`（用户可配置）；
+/// 改键后 AppDelegate.reregisterHotKeys() 调 unregister() 注销旧的再注册新的。
 final class HotKeyManager {
     private var hotKeyRef: EventHotKeyRef?
     private var id: UInt32 = 0
@@ -90,8 +91,19 @@ final class HotKeyManager {
         }
     }
 
+    /// 注销本热键（重配置时先注销旧的再注册新的）。可重复调用、幂等。
+    func unregister() {
+        if let ref = hotKeyRef {
+            UnregisterEventHotKey(ref)
+            hotKeyRef = nil
+        }
+        if id != 0 {
+            Self.handlersByID[id] = nil
+            id = 0
+        }
+    }
+
     deinit {
-        if let ref = hotKeyRef { UnregisterEventHotKey(ref) }
-        Self.handlersByID[id] = nil
+        unregister()
     }
 }

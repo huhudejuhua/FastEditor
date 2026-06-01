@@ -75,14 +75,16 @@ FastEditorApp/
 │   └── AppIcon/                 # App 文件图标源（make-icon.swift 生成 → make-icns.sh 切 .icns），README 有重做步骤
 └── Sources/FastEditorApp/
     ├── FastEditorApp.swift       # @main App + MenuBarExtra
-    ├── AppDelegate.swift         # 首启权限闸门 + 注册热键 + 持有 historyController
+    ├── AppDelegate.swift         # 首启权限闸门 + reregisterHotKeys()(从 HotKeySettings 读值注册) + 持有 historyController
     ├── Log.swift                 # os.Logger，subsystem com.fasteditor.app
     ├── Core/
     │   ├── PermissionManager.swift   # 检测 + 请求 + deep-link
     │   ├── FocusReader.swift         # readFocusedText() → (text, source)
     │   ├── ClipboardCapture.swift
     │   ├── PasteHelper.swift         # paste(text, source) 按 source 分支（§3.B）
-    │   ├── HotKeyManager.swift       # 可注册多个全局热键（handler 只装一次）
+    │   ├── HotKeyManager.swift       # 可注册多个全局热键（handler 只装一次）+ unregister() 供重注册
+    │   ├── HotKeyConfig.swift        # 热键配置模型(keyCode+Carbon修饰键)+HotKeySymbols(Cocoa↔Carbon转换/键码→符号)
+    │   ├── HotKeySettings.swift      # 热键配置持久化单例(UserDefaults)+ObservableObject桥，默认 ⌃⌘E/⌃⌘H
     │   └── LoginItemManager.swift    # 开机自启开关（SMAppService.mainApp 登记/注销）
     ├── Editor/
     │   ├── EditorPanelController.swift  # show/hide/toggle/loadText/bringToFront/confirmOverwrite/onCommit
@@ -92,6 +94,10 @@ FastEditorApp/
     │   ├── OnboardingWindowController.swift  # 含 relaunchApp()
     │   ├── OnboardingView.swift
     │   └── PermissionState.swift             # ObservableObject + 1s 轮询
+    ├── Settings/
+    │   ├── SettingsWindowController.swift    # 设置窗口容器（照搬 Onboarding 模式，Esc 关）
+    │   ├── SettingsView.swift                # 两个全局热键的展示+录制+冲突/失败提示+恢复默认
+    │   └── HotKeyRecorder.swift              # 录制器桥：本地事件监听抓 keyDown→HotKeyConfig（§5）
     ├── History/
     │   ├── HistoryEntry.swift         # @Model：id/text/createdAt/sourceApp
     │   ├── HistoryListView.swift      # 搜索 + 列表 + 选中高亮 + 快捷键提示
@@ -117,7 +123,8 @@ FastEditorApp/
 **已完成（每步一 commit，逐项验证通过）**：① 工程骨架 + SwiftUI App 生命周期 → ② 权限闸门（引导窗/deeplink/轮询/重启）→ ③ 编辑器 + 主热键 → ④ 接抓取 → ⑤ 接回填（焦点回归在原生 App / Chrome 网页框 / 终端实测通过）→ ⑥ 接历史（留档 + 检索 + 删除 + 持久化）→ ⑦ MenuBarExtra 菜单补齐。⏸️ ⑧ 签名公证见 §8（阻塞）。
 
 **与原规划的落地差异（已生效）**：
-- **主热键 `⌃⌘E`、副热键 `⌃⌘H`、提交键 `⌃Enter`**（不用 ⌘Enter / 单 ⌃E——单 ⌃E 是系统级「光标移到行尾」绑定）。
+- **主热键默认 `⌃⌘E`、副热键默认 `⌃⌘H`、提交键 `⌃Enter`**（不用 ⌘Enter / 单 ⌃E——单 ⌃E 是系统级「光标移到行尾」绑定）。
+- **两个全局热键已做成用户可配置**：状态栏「快捷键设置…」→ 设置窗口录制新组合，存 UserDefaults，即时重注册生效，菜单文案 + 设置页随 `HotKeySettings` 刷新。提交键 `⌃Enter` 仍写死（在编辑器内部，不走全局热键）。校验：至少一个 ⌘/⌃/⌥ 修饰键、两键不可撞、注册失败（被占用）报横幅。录制用 `addLocalMonitorForEvents` 截 keyDown（设置窗是本 App key window），不引第三方库（守 §9）。
 - **编辑器面板默认 640×340**。
 - **HotKeyManager 可注册多个热键**（全局 event handler 只装一次，每实例唯一 id）。
 - **HistoryStore 是单例**（`.shared`，持 ModelContainer + `save(text:sourceApp:)`），不走 demo 那种 AppDelegate 注入。
