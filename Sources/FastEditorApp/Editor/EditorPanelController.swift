@@ -150,7 +150,7 @@ final class EditorPanelController {
 
     private func makePanel() -> EditorPanel {
         let panel = EditorPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 340),
+            contentRect: NSRect(x: 0, y: 0, width: 640, height: 340),
             styleMask: [.titled, .closable, .resizable, .fullSizeContentView, .nonactivatingPanel],
             backing: .buffered,
             defer: false

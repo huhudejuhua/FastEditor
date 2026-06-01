@@ -118,7 +118,7 @@ FastEditorApp/
 
 **与原规划的落地差异（已生效）**：
 - **主热键 `⌃⌘E`、副热键 `⌃⌘H`、提交键 `⌃Enter`**（不用 ⌘Enter / 单 ⌃E——单 ⌃E 是系统级「光标移到行尾」绑定）。
-- **编辑器面板默认 480×340**。
+- **编辑器面板默认 640×340**。
 - **HotKeyManager 可注册多个热键**（全局 event handler 只装一次，每实例唯一 id）。
 - **HistoryStore 是单例**（`.shared`，持 ModelContainer + `save(text:sourceApp:)`），不走 demo 那种 AppDelegate 注入。
 - **TCC 跨重建保权限的真正修法**见 §7.A（ad-hoc 必须显式设 identifier-based DR）——五个 demo 都有的隐患，本工程已修。
